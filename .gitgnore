@@ -1,0 +1,10 @@
+*.pyc
+*.so
+*.mod
+*.a
+*.o
+*.DS_Store
+.idea
+*.egg
+*.egg-info
+.ipynb_checkpoints
