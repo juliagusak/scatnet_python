@@ -3,8 +3,8 @@ import mkl_fft
 from functools import partial
 import copy
 
-from filters import *
-from convolution import *
+from .filters import *
+from .convolution import *
 
 
 class ScatOptions():

@@ -1,7 +1,7 @@
 import numpy as np 
 import copy
 
-from core import *
+from .core import *
 
 class MetaFlattenScat():
     def __init__(self, bandwidth = None, resolution = None,
@@ -154,13 +154,11 @@ def concatenate_freq(S, format_type = 'table'):
     Concatenates first frequencies into tables
     
     Input
-        X (struct or cell): The scattering layer to process, or a cell array of
-           such scattering layers. Often S or U outputs of SCAT.
-        fmt (char, optional): Either 'table' or 'cell'. Describes how grouped
-           coefficients are assembled. See Description for more details (default
-           'table').
+        S: The scattering layers to process, often S or U outputs of SCAT.
+        format_type:Describes how grouped coefficients are assembled.
+            See Description for more details (default 'table').
     Output
-        Y (struct or cell): The same scattering layers, with all coefficients 
+        Y: The same scattering layers, with all coefficients 
            that only differ by first frequency lambda1 grouped together.
     Description
         In order to perform operations along frequency, or in the time-frequency
@@ -177,9 +175,9 @@ def concatenate_freq(S, format_type = 'table'):
         cients, with all coefficients having the same number of time samples. 
         This is the case, for example, when the input X is a scattering transform
         output S. Here, the coefficients can be concatenated into a single table
-        of dimension NxPxK. If the fmt parameter is set to 'table', this is in-
+        of dimension NxPxK. If the format_type parameter is set to 'table', this is in-
         deed what happens. The P coefficients in X are therefore replaced by
-        one table in Y of the dimension described above. If fmt equals 'cell',
+        one table in Y of the dimension described above. If format_type equals 'cell',
         a cell array is created instead of a table, containing each of the sig-
         nals in the group. In both cases, frequencies lambda1 are arranged in 
         order of decreasing frequency (increasing scale).
@@ -194,14 +192,18 @@ def concatenate_freq(S, format_type = 'table'):
     Y = [None]*len(S)
     
     for m in range(len(S)):
+        print('m: ', m)
+        
         if m == 0:
+            nsignal = np.rollaxis(S[0].signal[0], axis = 1)
+            print(nsignal.shape)
+            
             Y[0] = LayerU(metaU = MetaU(bandwidth = S[0].meta.bandwidth,
                                   resolution = S[0].meta.resolution,
                                   j = S[0].meta.j),
-                          signal = S[0].signal)
+                          signal = [nsignal])
         
         else:
-            print('m: ', m)
             Y[m] = LayerU(metaU = MetaU(bandwidth = [],
                                   resolution = [],
                                   j = []),
@@ -231,6 +233,7 @@ def concatenate_freq(S, format_type = 'table'):
 
             signals = np.array(S[m].signal)[:, :, -1, :]
 
+            print('max assigned index: ', np.max(assigned_idxs))
             for k in range(np.max(assigned_idxs)+1):
                 size_original = signals[0].shape[:-1]
 
@@ -252,8 +255,7 @@ def concatenate_freq(S, format_type = 'table'):
                     nsignal = signals[ind]
 
                 print(nsignal.shape)
-                print(S[m].meta.j[:,ind])
-                Y[m].signal.extend(nsignal)
+                Y[m].signal.extend([nsignal])
 
                 Y[m].meta.bandwidth.extend(np.array(S[m].meta.bandwidth)[ind])
                 Y[m].meta.resolution.extend(np.array(S[m].meta.resolution)[ind])

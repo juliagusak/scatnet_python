@@ -1,7 +1,7 @@
 import numpy as np 
 import mkl_fft
 
-from filters import *
+from .filters import *
 
 # could be extendede to pad multiple 1d arrays with different lengths
 # https://web.eecs.umich.edu/~fessler/course/451/l/pdf/updown.pdf

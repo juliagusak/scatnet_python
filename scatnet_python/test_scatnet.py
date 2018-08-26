@@ -2,10 +2,10 @@ import numpy as np
 import mkl_fft
 from functools import partial
 
-from filters import *
-from convolution import *
-from core import *
-from scatutils import *
+from .filters import *
+from .convolution import *
+from .core import *
+from .scatutils import *
 
 import matplotlib.pylab as plt
 
