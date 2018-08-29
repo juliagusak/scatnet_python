@@ -192,11 +192,11 @@ def concatenate_freq(S, format_type = 'table'):
     Y = [None]*len(S)
     
     for m in range(len(S)):
-        print('m: ', m)
+        # print('m: ', m)
         
         if m == 0:
             nsignal = np.rollaxis(S[0].signal[0], axis = 1)
-            print(nsignal.shape)
+            # print(nsignal.shape)
             
             Y[0] = LayerU(metaU = MetaU(bandwidth = S[0].meta.bandwidth,
                                   resolution = S[0].meta.resolution,
@@ -233,13 +233,13 @@ def concatenate_freq(S, format_type = 'table'):
 
             signals = np.array(S[m].signal)[:, :, -1, :]
 
-            print('max assigned index: ', np.max(assigned_idxs))
+            # print('max assigned index: ', np.max(assigned_idxs))
             for k in range(np.max(assigned_idxs)+1):
                 size_original = signals[0].shape[:-1]
 
                 # Select the coefficients belonging to the current group
                 ind = np.where(assigned_idxs == k)[0]
-                print('k: ', k)
+                # print('k: ', k)
 
                 # Each 'signal' being a table of size NxK, as described above, and
                 # the cell array being arranged horizontally, the following con-
@@ -254,7 +254,7 @@ def concatenate_freq(S, format_type = 'table'):
                 else:
                     nsignal = signals[ind]
 
-                print(nsignal.shape)
+                # print(nsignal.shape)
                 Y[m].signal.extend([nsignal])
 
                 Y[m].meta.bandwidth.extend(np.array(S[m].meta.bandwidth)[ind])
@@ -262,4 +262,22 @@ def concatenate_freq(S, format_type = 'table'):
                 Y[m].meta.j.append(np.concatenate([S[m].meta.j[:,ind]]))
 
             Y[m].meta.j = np.concatenate(Y[m].meta.j, axis = 1)
-    return Y  
+    return Y
+
+
+def stack_scat(Y):
+    '''
+    Input
+        Y - output of concatenate_scat(S)
+    Output
+        stacked_S: np.array of shape (N_scales, N_times, 1, N_signals). Output  has
+            the same format as output array in format_scat(S, format_type = 'table') 
+    '''
+    
+    stacked_S = np.concatenate(Y[0].signal)
+    
+    for i in range(1,len(Y)):
+        stacked_S = np.concatenate([stacked_S, np.concatenate(Y[i].signal)])
+        
+    stacked_S = stacked_S[:,:,np.newaxis,:]
+    return stacked_S
