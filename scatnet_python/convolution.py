@@ -145,38 +145,94 @@ def conv_sub_1d(x_fft, f, ds):
     # f = f.reshape((f.shape[0]//2**j0, 2**j0)).sum(axis = 1)
 
     sig_length = x_fft.shape[0]
-    end = len(f)
-    f = np.concatenate([f[:sig_length//2],
-    	[f[sig_length//2]/2 + f[end- sig_length//2]/2],
-    	f[end - sig_length//2+1:]])
-    
-    # represent filter in matrix form
-    f = f[:, np.newaxis] + 0*1j
-    # print('Inside conv_sub_1d: filter')
-    # print(f.shape)
-    # print(f[:10,0])
 
-    
-    # Calculate Fourier coefficients
-    y_fft = f * x_fft
-    # print('Inside conv_sub_1d: y_fft')
-    # print(y_fft.shape)
-    # print(y_fft[:10,0])
+    if type(f) != dict:
+        end = len(f)
+        f = np.concatenate([f[:sig_length//2],
+        	[f[sig_length//2]/2 + f[end- sig_length//2]/2],
+        	f[end - sig_length//2+1:]])
+        
+        # represent filter in matrix form
+        f = f[:, np.newaxis] + 0*1j
+        # print('Inside conv_sub_1d: filter')
+        # print(f.shape)
+        # print(f[:10,0])
+
+        
+        # Calculate Fourier coefficients
+        y_fft = f * x_fft
+        #print('Inside conv_sub_1d: y_fft')
+        #print(y_fft.shape)
+        # print(y_fft[:10,0])
+
+    elif f['type'] == 'fourier_truncated':
+        coefft, start = f['coefft'], f['start']
+
+        if len(coefft) > sig_length:
+            # filter is larger than signal, lowpass filter & periodize the former
+            # create lowpass filter
+            start0 = np.mod(start, f['N'])
+            nCoeffts0 = len(coefft)
+            
+            if start0 + nCoeffts0 - 1 <= f['N']:
+                rng = np.arange(start0, nCoeffts0)
+            else:
+                rng = np.concatenate([np.arange(start0, f['N']),
+                                      np.arange(nCoeffts0+start0-f['N'])])
+             
+            lowpass = np.zeros(shape=coefft.shape)
+            lowpass[rng < sig_length//2] = 1
+            lowpass[rng == sig_length//2] = 0.5
+            lowpass[rng == f['N']-sig_length//2] = 0.5 
+            lowpass[rng > f['N']-sig_length//2] = 1    
+            
+            coefft = (coefft*lowpass).reshape(
+                (sig_length, len(coefft)//sig_length), order = 'F').sum(axis = 1)
+            
+        nCoeffts = len(coefft)
+        j = int(np.log2(nCoeffts/sig_length))
+        start = np.mod(start, x_fft.shape[0])
+
+        if start+nCoeffts <= x_fft.shape[0]:
+            # filter support contained in one period, no wrap-around
+            y_fft = coefft[:,np.newaxis]*x_fft[start:(nCoeffts+start),:]
+        else:
+            # filter support wraps around, extract both parts
+            y_fft = coefft[:, np.newaxis]*np.concatenate([
+                x_fft[start:, :],
+                x_fft[: nCoeffts+start-x_fft.shape[0], :]
+            ])
+
 
     
     # Calculate downsampling factor with respect to y_fft
     # Пока в имплементации у нас всегда y_fft.shape[0]=x_fft.shape[0]
     ds_factor = ds + np.log2(y_fft.shape[0]/sig_length)
-    # print('Inside conv_sub_1d: dsj: ', ds_factor)
+    #print('Inside conv_sub_1d: dsj: ', ds_factor)
     
     if ds_factor > 0:
         y_fft = downsample_filter(y_fft, ds_factor = ds_factor)
     elif ds_factor < 0:
-        print('Downsampling for ds_factor > 0 need to be implemented')
-        raise NotImplementedError
-    # print('Inside conv_sub_1d; downsampled y_fft: ')
-    # print(y_fft.shape)
+        # upsample, so zero-pad in Fourier
+        # note that this only happens for fourier_truncated filters, since otherwise
+        # filter sizes are always the same as the signal size
+        # also, we have to do one-sided padding since otherwise we might break 
+        # continuity of Fourier transform
+        y_fft =  np.concatenate([y_fft,
+            np.zeros((
+                (2**(-ds_factor)-1)*y_fft.shape[0],
+                y_fft.shape[1]
+                ))])
+
+    #print('Inside conv_sub_1d; downsampled y_fft: ')
+    #print(y_fft.shape)
     # print(y_fft[:4,0])
+
+    if (type(f) == dict) and (f['type'] == 'fourier_truncated') and f['recenter']:
+        # result has been shifted in frequency so that the zero fre-
+        # quency is actually at -filter.start+1
+        y_fft = np.roll(y_fft, f['start'])
+
     
     # Calculate inverse Fourier transform
     # Use .T to apply transform along columns (coefficients of 1-d signals)

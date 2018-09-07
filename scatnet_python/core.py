@@ -131,7 +131,7 @@ def wavelet_1d(x, filters, options = None):
     return x_phi, x_psi, meta_phi, meta_psi
 
 
-def wavelet_layer_1d(U, filters, scat_opt = None):
+def wavelet_layer_1d(U, filters, scat_opt = None, calc_U = True):
     '''
     Compute the one-dimensional wavelet transform from
     the modulus wavelet coefficients of the previous layer.
@@ -183,13 +183,18 @@ def wavelet_layer_1d(U, filters, scat_opt = None):
                    signal = [])
  
     r = 0
+    #print('center_psi: ', center_psi)
+
+    #print('Inside wavelet_layer_1d: len(U.signal): {}'.format(len(U.signal)))
     for p1 in range(len(U.signal)):
         
         current_bw = U.meta.bandwidth[p1] * 2**scat_opt.path_margin
         psi_mask = (current_bw > center_psi) 
+        #print('curr_bw: ', current_bw)
         
         scat_opt.x_resolution = U.meta.resolution[p1]
-        scat_opt.psi_mask = psi_mask
+        scat_opt.psi_mask = psi_mask*calc_U
+        #print('Inside wavelet_layer_1d: psi_mask.sum(): {}'.format(psi_mask.sum()))
 
         x_phi, x_psi, meta_phi, meta_psi = wavelet_1d(U.signal[p1],
                                                       filters,
@@ -231,14 +236,18 @@ def modulus_layer(W):
 
 
 
-def wavelet_factory_1d(N, filt_opt_bank, scat_opt = None):
+def wavelet_factory_1d(N, filt_opt_bank, scat_opt = None, calc_U_bank = None):
     bank_filters = filter_bank(N, filt_opt_bank)
-    
+
+
     if scat_opt is None:
         scat_opt = ScatOptions()
         
     if scat_opt.M is None:
         scat_opt.M = 2
+
+    if calc_U_bank is None:
+        calc_U_bank = np.ones(scat_opt.M + 1)
     
     Wop = []
     for m in range(scat_opt.M + 1):
@@ -246,7 +255,8 @@ def wavelet_factory_1d(N, filt_opt_bank, scat_opt = None):
 
         Wop.append(partial(wavelet_layer_1d,
                            filters = bank_filters[filt_ind],
-                           scat_opt = scat_opt))
+                           scat_opt = scat_opt, 
+                           calc_U = calc_U_bank[m]))
         
     return Wop, bank_filters
 

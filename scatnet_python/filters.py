@@ -1,4 +1,6 @@
 import numpy as np 
+from decimal import Decimal, ROUND_HALF_UP
+
 
 class FiltOptions(object):
     '''
@@ -27,12 +29,14 @@ class FiltOptions(object):
         a number of linearly-spaced constant-bandwidth filters are added
     '''
 
-    def __init__(self, T, Q = None, B = None,
-                 phi_bw_miltiplier = None, sigma0 = None,
+    def __init__(self, T = None, Q = None, B = None, J = None,
+                 phi_bw_multiplier = None, sigma0 = None,
                  boundary = 'symm', filter_size = None,
                  precision = 'float64', filter_type = 'morlet_1d',
-                 phi_dirac = 0):
-        self.T = T
+                 phi_dirac = 0,
+                 filter_format = None, truncate_threshold = 1e-3):
+        
+        
        
         if Q is None:
             self.Q = 1
@@ -44,10 +48,10 @@ class FiltOptions(object):
         else:
             self.B = B
         
-        if  phi_bw_miltiplier is None:
-            self.phi_bw_miltiplier = 1 + (self.Q == 1)
+        if  phi_bw_multiplier is None:
+            self.phi_bw_multiplier = 1 + (self.Q == 1)
         else:
-            self.phi_bw_miltiplier = phi_bw_miltiplier
+            self.phi_bw_multiplier = phi_bw_multiplier
 
         if sigma0 is None:
             self.sigma0 = 2/np.sqrt(3)
@@ -59,15 +63,32 @@ class FiltOptions(object):
         self.sigma_psi0 = self.count_sigma_psi0()
         self.sigma_phi0 = self.count_sigma_phi0()
 
-        self.J = self.T_to_J()
+
         self.P = self.count_P()
+       
+
+        if J is None:
+            self.T = T
+            self.J = self.T_to_J()
+        else:
+            self.J = J
+            if T is None:
+                self.T = self.J_to_T()
+            else:
+                self.T = T
          
         self.boundary = boundary
                 
         self.precision = precision
         self.filter_type = filter_type
         self.phi_dirac = phi_dirac
+
+        if filter_format is None:
+            self.filter_format = 'fourier_truncated'
+        else:
+            self.filter_format = filter_format
     
+        self.truncate_threshold = truncate_threshold
     
     def count_center_psi0(self):
         return np.pi/2*(2**(-1/self.Q) + 1)
@@ -77,10 +98,13 @@ class FiltOptions(object):
         return 0.5*self.sigma0/(1 - 2**(-1/self.B))
 
     def count_sigma_phi0(self):
-        return  self.sigma_psi0/self.phi_bw_miltiplier  
+        return  self.sigma_psi0/self.phi_bw_multiplier  
     
     def T_to_J(self):
-        return int(1 + round(np.log2(self.T*self.phi_bw_miltiplier/4/self.B))*self.Q) 
+        return int(1 + round(np.log2(self.T*self.phi_bw_multiplier/4/self.B))*self.Q) 
+
+    def J_to_T(self):
+        return int(4*self.B*2**((self.J-1)/self.Q)/self.phi_bw_multiplier)
     
     def count_P(self):
         return int(round((2**(-1/self.Q) - 0.25*self.sigma0/self.sigma_phi0)/(1-2**(-1/self.Q))))
@@ -187,12 +211,84 @@ def morletify(f, sigma):
     return f
 
 
-def optimize_filter(f, is_lowpass, filt_opt):
+# Custom rounding, performs like np.round(), but rounds all halfs up
+def normal_round(t):
+    rounded = Decimal(t).quantize(Decimal('1.'), rounding = ROUND_HALF_UP)
+    return int(rounded)
+
+
+def truncate_filter(f, threshold, lowpass=None):
+    '''
+    TRUNCATE_FILTER Truncates the Fourier transform of a filter
+
+    Input
+        f: The Fourier representation of the filter.
+
+    Output
+        truncated_f: The truncated representation of the filter. See descrip-
+       tion for more details.
+
+    Description
+        By extracting and storing only the Fourier transform coefficients whose 
+        are above a certain threshold relative to the maximum value, storage
+        requirements for the filters are lessened and computation is sped up
+        since only non-zero coefficients are multiplied during convolution.
+
+        The support of the Fourier transform is defined so that all coefficients
+        with a magnitude above threshold*fmax are kept, where fmax is the maxi-
+        mum magnitude, and so that length(f) divided by the size of the
+        support is a power of 2.
+
+    The output truncated_f contains the fields:
+       truncated_f.type: Fixed to 'fourier_truncated'.
+       truncated_f.N: The original size of the filter.
+       truncated_f.recenter: Indicates whether the Fourier transform
+          should be recentered after convolution. This is always true.
+       truncated_f.start: The frequency index where the support of the
+          Fourier transform starts.
+       truncated_f.coefft: The values of the Fourier coefficients on the
+          support.
+    
+    '''
+    
+    N = len(f)
+    
+    temp, ind_max = np.max(f), np.argmax(f)
+    
+    # roll array to put maximal element to the center
+    f = np.roll(f, N//2 - ind_max -1)
+
+    # indecies of the first and last elements of the filter
+    # greater than max*threshold 
+    ind1, ind2 = np.where(np.abs(f) > (np.max(np.abs(f))*threshold))[0][[0,-1]]
+    
+    length = ind2 - ind1 + 1
+    length = N//2**int(np.log2(N/length))
+
+    ind1 = normal_round(normal_round((ind1+ind2)/2) - length/2)
+    ind2 = ind1 + length -1
+    
+
+    f = f[np.mod(np.arange(ind1, ind2+1), N)]
+
+    coefft = f
+    start = ind1 - (N//2 - ind_max) + 1
+    
+    truncated_f = {'coefft': coefft, 'start': start,
+                'type': 'fourier_truncated', 'N': N, 'recenter': True}
+    
+    return truncated_f
+
+
+def optimize_filter(f, lowpass, filt_opt):
     '''
         f: Fourier transform of the filter
-        is_lowpass: if True, f contains lowpass filter
+        lowpass: if True, f contains lowpass filter
     '''
-    return f
+    if filt_opt.filter_format == 'fourier':
+        return f
+    elif filt_opt.filter_format == 'fourier_truncated':
+        return truncate_filter(f, filt_opt.truncate_threshold, lowpass)
 
 
 def morlet_filter_bank_1d(signal_length, filt_opt):
@@ -247,7 +343,7 @@ def morlet_filter_bank_1d(signal_length, filt_opt):
     
     do_gabor = (filt_opt.filter_type == 'gabor_1d')
     
-    filters = Filters(T=filt_opt.T, Q = filt_opt.Q)
+    filters = Filters(T=filt_opt.T, Q = filt_opt.Q, J = filt_opt.J)
 #     filters.meta = filt_opt
     filters.meta.filter_size = N
     

@@ -387,10 +387,12 @@ def test_scat(T = 2**10, x = None):
 
     filt_opt_bank = [FiltOptions(Q = 8, T = T,
                               filter_type = 'morlet_1d',
-                              boundary = 'symm'),
+                              boundary = 'symm', 
+                              filter_format = 'fourier_truncated'),
                  FiltOptions(Q = 1, T = T,
                               filter_type = 'morlet_1d',
-                              boundary = 'symm')
+                              boundary = 'symm',
+                              filter_format='fourier_truncated')
                 ]
     Wop, bank  = wavelet_factory_1d(N, filt_opt_bank)    
     print(vars(filt_opt_bank[0]))
