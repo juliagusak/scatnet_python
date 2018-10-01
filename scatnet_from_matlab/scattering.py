@@ -35,30 +35,13 @@ def get_scattering_coefficients(path_to_scatnet, np_arr_batch, N, T, M = 2,
     
     
     # set filter options, get wavelet filter bank
-#    eng.eval("".join(["filt_opt = default_filter_options('audio', T);",
+#     eng.eval("".join(["filt_opt = default_filter_options('audio', T);",
 #                       "scat_opt.M = M;",                          
 #                       "[Wop, filters] = wavelet_factory_1d(N, filt_opt, scat_opt)"]), nargout = 0)
-    eng.eval("".join(["sigma0 = 2/sqrt(3);",
-                      "filt_opt = struct();",
-                      "filt_opt.filter_type = 'morlet_1d';",
-                      "filt_opt.Q = {};".format(str(Q)),
-                      "filt_opt.B = filt_opt.Q;",
-                      "filt_opt.xi_psi = 1/2*sigma0/(1-2^(-1/filt_opt.B));",
-                      "filt_opt.sigma_psi = 1/2*sigma0/(1-2^(-1/filt_opt.B));",
-                      "filt_opt.phi_bw_multiplier = 1+(filt_opt.Q==1);",
-                      "filt_opt.sigma_phi = filt_opt.sigma_psi/filt_opt.phi_bw_multiplier;",
+    eng.eval("".join(["filt_opt.Q = {};".format(str(Q)),
                       "filt_opt.J = T_to_J(T, filt_opt);",
-                      "filt_opt.P = round((2^(-1/filt_opt.Q)-1/4*sigma0/filt_opt.sigma_phi)/(1-2^(-1/filt_opt.Q)));",
-                      "filt_opt.precision = 'double';",
-                      "filt_opt.filter_format = 'fourier_truncated';",
-                      "filt_opt.boundary = 'symm';",
-                      "filt_opt.phi_dirac = 0;",
                       "scat_opt.M = M;",
                       "[Wop, filters] = wavelet_factory_1d(N, filt_opt, scat_opt);"]), nargout = 0)
-    
-   
-    J = eng.eval("filt_opt;")
-    print("J = {}".format(J))
     
     
     S_table_batch = []
@@ -83,13 +66,6 @@ def get_scattering_coefficients(path_to_scatnet, np_arr_batch, N, T, M = 2,
         
         S_table_batch.append(S_table)
         
-    S = eng.eval("S;")
-    for i in range(M+1):
-        print(S[i]['meta'])
-        #print(S[i]['meta']['j'],
-        #      S[i]['meta']['bandwidth'],
-        #      S[i]['meta']['resolution'])
-
     # Get number of scattering coefficients
     time_count = np.array(S_table).shape[1]
     
